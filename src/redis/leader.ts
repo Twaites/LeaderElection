@@ -1,23 +1,28 @@
 import redisClient from "./index";
 import { LEADER_KEY, LEADER_TTL } from "../config";
+import logEvent from "../utils/logger";
 
 export async function tryBecomeLeader(): Promise<boolean> {
-    const success = await redisClient.set(
-        LEADER_KEY,
-        process.env.FLY_MACHINE_ID!,
-        'EX',
-        LEADER_TTL,
-        'NX'
-    );
-    
-    if (success) {
-        const ttl = await redisClient.ttl(LEADER_KEY);
-        console.log(`Leader TTL set to: ${ttl} seconds`);
+    try {
+        const success = await redisClient.set(
+            LEADER_KEY,
+            process.env.FLY_MACHINE_ID!,
+            'EX',
+            LEADER_TTL,
+            'NX'
+        );
+        return success !== null;
+    } catch (error) {
+        logEvent(`Redis error in tryBecomeLeader: ${error}`);
+        return false;
     }
-    
-    return success !== null;
 }
 
 export async function getRedisLeader(): Promise<string | null> {
-    return await redisClient.get(LEADER_KEY);
+    try {
+        return await redisClient.get(LEADER_KEY);
+    } catch (error) {
+        logEvent(`Redis error in getRedisLeader: ${error}`);
+        return null;
+    }
 }
