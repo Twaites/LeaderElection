@@ -16,8 +16,8 @@ async function electLeader(): Promise<void> {
         if (!pgLeader) {
             logEvent("No leader found. Trying to become leader...");
             if (await tryBecomeLeader()) {
-                logEvent(`${process.env.SERVER_ID} is now the leader`);
-                await updateLeader(process.env.SERVER_ID!);
+                logEvent(`${process.env.FLY_MACHINE_ID } is now the leader`);
+                await updateLeader(process.env.FLY_MACHINE_ID !);
             }
         } else {
             logEvent(`Using PostgreSQL leader: ${pgLeader.server_id}`);
@@ -30,10 +30,10 @@ async function electLeader(): Promise<void> {
 async function refreshLeader(): Promise<void> {
     const currentLeader = await getRedisLeader();
 
-    if (currentLeader === process.env.SERVER_ID) {
-        logEvent(`Refreshing leader ${process.env.SERVER_ID} in Redis`);
+    if (currentLeader === process.env.FLY_MACHINE_ID ) {
+        logEvent(`Refreshing leader ${process.env.FLY_MACHINE_ID } in Redis`);
         await tryBecomeLeader();
-        await updateLeader(process.env.SERVER_ID!);
+        await updateLeader(process.env.FLY_MACHINE_ID !);
     }
 }
 
@@ -50,8 +50,8 @@ async function detectFailover(): Promise<void> {
             if (leaderDownTime > FAILOVER_THRESHOLD) {
                 logEvent("Leader has been offline too long! Electing new leader...");
                 if (await tryBecomeLeader()) {
-                    logEvent(`${process.env.SERVER_ID} is now the new leader`);
-                    await updateLeader(process.env.SERVER_ID!);
+                    logEvent(`${process.env.FLY_MACHINE_ID } is now the new leader`);
+                    await updateLeader(process.env.FLY_MACHINE_ID !);
                 }
             }
         }

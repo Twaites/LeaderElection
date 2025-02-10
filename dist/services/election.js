@@ -17,8 +17,8 @@ async function electLeader() {
         if (!pgLeader) {
             (0, logger_1.default)("No leader found. Trying to become leader...");
             if (await (0, leader_1.tryBecomeLeader)()) {
-                (0, logger_1.default)(`${process.env.SERVER_ID} is now the leader`);
-                await (0, leader_2.updateLeader)(process.env.SERVER_ID);
+                (0, logger_1.default)(`${process.env.FLY_MACHINE_ID} is now the leader`);
+                await (0, leader_2.updateLeader)(process.env.FLY_MACHINE_ID);
             }
         }
         else {
@@ -32,10 +32,10 @@ async function electLeader() {
 exports.electLeader = electLeader;
 async function refreshLeader() {
     const currentLeader = await (0, leader_1.getRedisLeader)();
-    if (currentLeader === process.env.SERVER_ID) {
-        (0, logger_1.default)(`Refreshing leader ${process.env.SERVER_ID} in Redis`);
+    if (currentLeader === process.env.FLY_MACHINE_ID) {
+        (0, logger_1.default)(`Refreshing leader ${process.env.FLY_MACHINE_ID} in Redis`);
         await (0, leader_1.tryBecomeLeader)();
-        await (0, leader_2.updateLeader)(process.env.SERVER_ID);
+        await (0, leader_2.updateLeader)(process.env.FLY_MACHINE_ID);
     }
 }
 async function detectFailover() {
@@ -48,8 +48,8 @@ async function detectFailover() {
             if (leaderDownTime > config_1.FAILOVER_THRESHOLD) {
                 (0, logger_1.default)("Leader has been offline too long! Electing new leader...");
                 if (await (0, leader_1.tryBecomeLeader)()) {
-                    (0, logger_1.default)(`${process.env.SERVER_ID} is now the new leader`);
-                    await (0, leader_2.updateLeader)(process.env.SERVER_ID);
+                    (0, logger_1.default)(`${process.env.FLY_MACHINE_ID} is now the new leader`);
+                    await (0, leader_2.updateLeader)(process.env.FLY_MACHINE_ID);
                 }
             }
         }
