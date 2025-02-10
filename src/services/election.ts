@@ -2,6 +2,7 @@ import { tryBecomeLeader, getRedisLeader } from "../redis/leader";
 import { updateLeader } from "../db/leader";
 import logEvent from "../utils/logger";
 import { LEADER_TTL, INSTANCE_ID } from "../config";
+import { recordLeaderEvent } from "../db/leader-history";
 
 class LeaderElection {
     private isLeader: boolean = false;
@@ -21,9 +22,13 @@ class LeaderElection {
             if (this.isLeader) {
                 if (await tryBecomeLeader()) {
                     await updateLeader(this.instanceId);
+                    await recordLeaderEvent(this.instanceId, 'REFRESH');
                     logEvent('Refreshed leadership');
                 } else {
                     this.isLeader = false;
+                    await recordLeaderEvent(this.instanceId, 'LOST', {
+                        newLeader: currentLeader
+                    });
                     logEvent('Lost leadership');
                 }
                 return;
@@ -32,6 +37,7 @@ class LeaderElection {
             if (!currentLeader && await tryBecomeLeader()) {
                 this.isLeader = true;
                 await updateLeader(this.instanceId);
+                await recordLeaderEvent(this.instanceId, 'ELECTED');
                 logEvent('Became leader');
             }
         } catch (error) {
