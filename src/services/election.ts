@@ -1,90 +1,135 @@
 import { tryBecomeLeader, getRedisLeader } from "../redis/leader";
 import { updateLeader, getCurrentLeader } from "../db/leader";
 import logEvent from "../utils/logger";
-import { LEADER_TTL, FAILOVER_THRESHOLD } from "../config";
+import { LEADER_TTL, FAILOVER_THRESHOLD, LEADER_REFRESH_RATIO, FOLLOWER_CHECK_RATIO } from "../config";
 
-const LEADER_REFRESH_INTERVAL = Math.floor(LEADER_TTL * 0.6) * 1000; // Refresh at 60% of TTL
-const FOLLOWER_CHECK_INTERVAL = Math.floor(LEADER_TTL * 0.8) * 1000; // Check less frequently as follower
-let isCurrentLeader = false;
-let lastKnownLeader: string | null = null;
-let lastCheckTime = 0;
+class LeaderElection {
+    private isLeader: boolean = false;
+    private lastCheckTime: number = 0;
+    private readonly refreshInterval: number;
+    private readonly checkInterval: number;
+    private readonly instanceId: string;
+    private intervalHandle?: NodeJS.Timeout;
 
-async function electLeader(): Promise<void> {
-    const now = Date.now();
-    try {
-        if (isCurrentLeader) {
-            // Leader only needs to refresh its key periodically
-            if (now - lastCheckTime >= LEADER_REFRESH_INTERVAL) {
-                if (await tryBecomeLeader()) {
-                    await updateLeader(process.env.FLY_MACHINE_ID!);
-                    lastCheckTime = now;
-                } else {
-                    isCurrentLeader = false;
-                    lastKnownLeader = null;
-                    logEvent(`${process.env.FLY_MACHINE_ID} lost leadership`);
+    constructor() {
+        this.refreshInterval = Math.floor(LEADER_TTL * LEADER_REFRESH_RATIO) * 1000;
+        this.checkInterval = Math.floor(LEADER_TTL * FOLLOWER_CHECK_RATIO) * 1000;
+        this.instanceId = process.env.FLY_MACHINE_ID!;
+
+        if (!this.instanceId) {
+            throw new Error('FLY_MACHINE_ID must be set');
+        }
+
+        logEvent(`Initialized with refresh: ${this.refreshInterval}ms, check: ${this.checkInterval}ms`);
+    }
+
+    private setLeaderState(isLeader: boolean): void {
+        if (this.isLeader !== isLeader) {
+            this.isLeader = isLeader;
+            logEvent(`Leadership state changed to: ${isLeader ? 'leader' : 'follower'}`);
+            this.updateInterval();
+        }
+    }
+
+    private updateInterval(): void {
+        if (this.intervalHandle) {
+            clearInterval(this.intervalHandle);
+            logEvent('Cleared previous interval');
+        }
+
+        const interval = this.isLeader ? this.refreshInterval : this.checkInterval;
+        this.intervalHandle = setInterval(async () => {
+            try {
+                await this.checkLeadership();
+            } catch (error) {
+                logEvent(`Error in interval check: ${error}`);
+            }
+        }, interval);
+
+        logEvent(`Set new interval: ${interval}ms (${this.isLeader ? 'leader' : 'follower'} mode)`);
+    }
+
+    private async refreshLeadership(): Promise<void> {
+        try {
+            const success = await tryBecomeLeader();
+            if (success) {
+                await updateLeader(this.instanceId);
+                this.lastCheckTime = Date.now();
+                logEvent('Successfully refreshed leadership');
+            } else {
+                logEvent(`Failed to refresh leadership`);
+                this.setLeaderState(false);
+            }
+        } catch (error) {
+            logEvent(`Error in refreshLeadership: ${error}`);
+            this.setLeaderState(false);
+        }
+    }
+
+    private async attemptLeadership(): Promise<void> {
+        try {
+            const currentLeader = await getRedisLeader();
+            
+            if (!currentLeader) {
+                const success = await tryBecomeLeader();
+                if (success) {
+                    await updateLeader(this.instanceId);
+                    this.setLeaderState(true);
+                    logEvent('Successfully claimed leadership');
                 }
             }
+            
+            this.lastCheckTime = Date.now();
+        } catch (error) {
+            logEvent(`Error in attemptLeadership: ${error}`);
+        }
+    }
+
+    public async checkLeadership(): Promise<void> {
+        const now = Date.now();
+        const interval = this.isLeader ? this.refreshInterval : this.checkInterval;
+
+        if (now - this.lastCheckTime < interval) {
+            return;
+        }
+
+        if (this.isLeader) {
+            await this.refreshLeadership();
         } else {
-            // Non-leaders check less frequently
-            if (now - lastCheckTime >= FOLLOWER_CHECK_INTERVAL) {
-                const redisLeader = await getRedisLeader();
-                
-                if (!redisLeader && await tryBecomeLeader()) {
-                    isCurrentLeader = true;
-                    lastKnownLeader = process.env.FLY_MACHINE_ID || null;
-                    logEvent(`${process.env.FLY_MACHINE_ID} is now the leader`);
-                    await updateLeader(process.env.FLY_MACHINE_ID!);
-                } else {
-                    lastKnownLeader = redisLeader;
-                }
-                lastCheckTime = now;
-            }
+            await this.attemptLeadership();
         }
-    } catch (error) {
-        logEvent(`Error in election process: ${error}`);
-        // Don't reset lastCheckTime on error to prevent rapid retries
     }
-}
 
-async function refreshLeader(): Promise<void> {
-    const currentLeader = await getRedisLeader();
-
-    if (currentLeader === process.env.FLY_MACHINE_ID ) {
-        logEvent(`Refreshing leader ${process.env.FLY_MACHINE_ID } in Redis`);
-        await tryBecomeLeader();
-        await updateLeader(process.env.FLY_MACHINE_ID !);
+    public start(): void {
+        logEvent('Starting leader election process');
+        this.checkLeadership().catch(error => {
+            logEvent(`Error in initial leadership check: ${error}`);
+        });
+        this.updateInterval();
     }
-}
 
-async function detectFailover(): Promise<void> {
-    const redisLeader = await getRedisLeader();
-
-    if (!redisLeader) {
-        logEvent("Leader missing from Redis! Checking PostgreSQL...");
-        const pgLeader = await getCurrentLeader();
-
-        if (pgLeader) {
-            const leaderDownTime = Date.now() - new Date(pgLeader.last_heartbeat).getTime();
-
-            if (leaderDownTime > FAILOVER_THRESHOLD) {
-                logEvent("Leader has been offline too long! Electing new leader...");
-                if (await tryBecomeLeader()) {
-                    logEvent(`${process.env.FLY_MACHINE_ID } is now the new leader`);
-                    await updateLeader(process.env.FLY_MACHINE_ID !);
-                }
-            }
+    public stop(): void {
+        if (this.intervalHandle) {
+            clearInterval(this.intervalHandle);
+            this.intervalHandle = undefined;
+            logEvent('Stopped leader election process');
         }
     }
 }
 
-// Run leader election at startup
-electLeader();
+const election = new LeaderElection();
 
-// Keep refreshing the leader status every minute
-setInterval(refreshLeader, LEADER_REFRESH_INTERVAL);
+// Handle process shutdown gracefully
+process.on('SIGTERM', () => {
+    logEvent('Received SIGTERM signal');
+    election.stop();
+});
 
-// Check for failover every minute
-setInterval(detectFailover, LEADER_REFRESH_INTERVAL);
+process.on('SIGINT', () => {
+    logEvent('Received SIGINT signal');
+    election.stop();
+});
 
-// Export for testing and monitoring
-export { electLeader, isCurrentLeader, lastKnownLeader };
+election.start();
+
+export default election;
