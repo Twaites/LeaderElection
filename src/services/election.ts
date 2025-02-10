@@ -1,7 +1,7 @@
 import { tryBecomeLeader, getRedisLeader } from "../redis/leader";
 import { updateLeader } from "../db/leader";
 import logEvent from "../utils/logger";
-import { LEADER_TTL } from "../config";
+import { LEADER_TTL, INSTANCE_ID } from "../config";
 
 class LeaderElection {
     private isLeader: boolean = false;
@@ -10,12 +10,8 @@ class LeaderElection {
     private readonly checkInterval: number;
 
     constructor() {
-        this.instanceId = process.env.FLY_MACHINE_ID!;
+        this.instanceId = INSTANCE_ID;
         this.checkInterval = Math.floor(LEADER_TTL * 0.5) * 1000;
-
-        if (!this.instanceId) {
-            throw new Error('FLY_MACHINE_ID must be set');
-        }
     }
 
     private async checkLeadership(): Promise<void> {

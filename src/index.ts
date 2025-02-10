@@ -1,9 +1,10 @@
 import dotenv from "dotenv";
 import election from "./services/election";
+import { INSTANCE_ID } from "./config";
 
 dotenv.config();
 
-console.log(`Server ${process.env.FLY_MACHINE_ID} is starting...`);
+console.log(`Server ${INSTANCE_ID} is starting...`);
 
 // Keep the process alive
 process.stdin.resume();

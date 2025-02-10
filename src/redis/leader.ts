@@ -1,12 +1,12 @@
 import redisClient from "./index";
-import { LEADER_KEY, LEADER_TTL } from "../config";
+import { LEADER_KEY, LEADER_TTL, INSTANCE_ID } from "../config";
 import logEvent from "../utils/logger";
 
 export async function tryBecomeLeader(): Promise<boolean> {
     try {
         const success = await redisClient.set(
             LEADER_KEY,
-            process.env.FLY_MACHINE_ID!,
+            INSTANCE_ID,
             'EX',
             LEADER_TTL,
             'NX'
