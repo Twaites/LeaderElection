@@ -12,21 +12,17 @@ const LEADER_REFRESH_INTERVAL = 60 * 1000; // 1 minute
 async function electLeader() {
     const redisLeader = await (0, leader_1.getRedisLeader)();
     if (!redisLeader) {
-        (0, logger_1.default)("No leader in Redis. Checking PostgreSQL...");
-        const pgLeader = await (0, leader_2.getCurrentLeader)();
-        if (!pgLeader) {
-            (0, logger_1.default)("No leader found. Trying to become leader...");
-            if (await (0, leader_1.tryBecomeLeader)()) {
-                (0, logger_1.default)(`${process.env.FLY_MACHINE_ID} is now the leader`);
-                await (0, leader_2.updateLeader)(process.env.FLY_MACHINE_ID);
-            }
+        (0, logger_1.default)("No leader in Redis. Attempting to become leader...");
+        if (await (0, leader_1.tryBecomeLeader)()) {
+            (0, logger_1.default)(`${process.env.FLY_MACHINE_ID} is now the leader`);
+            await (0, leader_2.updateLeader)(process.env.FLY_MACHINE_ID);
         }
         else {
-            (0, logger_1.default)(`Using PostgreSQL leader: ${pgLeader.server_id}`);
+            (0, logger_1.default)("Failed to become leader - another instance may have won the election");
         }
     }
     else {
-        (0, logger_1.default)(`Current leader: ${redisLeader}`);
+        (0, logger_1.default)(`Current Redis leader: ${redisLeader}`);
     }
 }
 exports.electLeader = electLeader;

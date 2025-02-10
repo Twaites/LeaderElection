@@ -15,4 +15,24 @@ if (!process.env.REDIS_URL) {
     console.error("Redis error: ", err);
   });
   
+  redisClient.on("connect", () => {
+    console.log("Successfully connected to Redis");
+  });
+  
+  redisClient.on("ready", () => {
+    console.log("Redis client is ready");
+  });
+  
+  // Test Redis connection on startup
+  async function testRedisConnection() {
+    try {
+      await redisClient.ping();
+      console.log("Redis connection test successful");
+    } catch (error) {
+      console.error("Redis connection test failed:", error);
+    }
+  }
+  
+  testRedisConnection();
+  
   export default redisClient; 

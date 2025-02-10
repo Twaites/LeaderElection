@@ -8,6 +8,10 @@ const index_1 = __importDefault(require("./index"));
 const config_1 = require("../config");
 async function tryBecomeLeader() {
     const success = await index_1.default.set(config_1.LEADER_KEY, process.env.FLY_MACHINE_ID, 'EX', config_1.LEADER_TTL, 'NX');
+    if (success) {
+        const ttl = await index_1.default.ttl(config_1.LEADER_KEY);
+        console.log(`Leader TTL set to: ${ttl} seconds`);
+    }
     return success !== null;
 }
 exports.tryBecomeLeader = tryBecomeLeader;
