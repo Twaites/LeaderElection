@@ -4,7 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const leader_1 = require("../redis/leader");
-const leader_2 = require("../db/leader");
+const leader_history_1 = require("../db/leader-history");
 const logger_1 = __importDefault(require("../utils/logger"));
 const config_1 = require("../config");
 class LeaderElection {
@@ -13,29 +13,25 @@ class LeaderElection {
     instanceId;
     checkInterval;
     constructor() {
-        this.instanceId = process.env.FLY_MACHINE_ID;
+        this.instanceId = config_1.INSTANCE_ID;
         this.checkInterval = Math.floor(config_1.LEADER_TTL * 0.5) * 1000;
-        if (!this.instanceId) {
-            throw new Error('FLY_MACHINE_ID must be set');
-        }
     }
     async checkLeadership() {
         try {
-            const currentLeader = await (0, leader_1.getRedisLeader)();
+            const leaderInfo = await (0, leader_1.getLeaderInfo)();
             if (this.isLeader) {
-                if (await (0, leader_1.tryBecomeLeader)()) {
-                    await (0, leader_2.updateLeader)(this.instanceId);
-                    (0, logger_1.default)('Refreshed leadership');
-                }
-                else {
+                if (!await (0, leader_1.updateLeaderHeartbeat)()) {
                     this.isLeader = false;
+                    await (0, leader_history_1.recordLeaderEvent)(this.instanceId, 'LOST');
                     (0, logger_1.default)('Lost leadership');
                 }
                 return;
             }
-            if (!currentLeader && await (0, leader_1.tryBecomeLeader)()) {
+            const now = Date.now();
+            const isStale = !leaderInfo || (now - leaderInfo.lastHeartbeat) > (config_1.LEADER_TTL * 1000);
+            if (isStale && await (0, leader_1.tryBecomeLeader)()) {
                 this.isLeader = true;
-                await (0, leader_2.updateLeader)(this.instanceId);
+                await (0, leader_history_1.recordLeaderEvent)(this.instanceId, 'ELECTED');
                 (0, logger_1.default)('Became leader');
             }
         }

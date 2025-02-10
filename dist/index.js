@@ -5,8 +5,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const dotenv_1 = __importDefault(require("dotenv"));
 const election_1 = __importDefault(require("./services/election"));
+const config_1 = require("./config");
 dotenv_1.default.config();
-console.log(`Server ${process.env.FLY_MACHINE_ID} is starting...`);
+console.log(`Server ${config_1.INSTANCE_ID} is starting...`);
 // Keep the process alive
 process.stdin.resume();
 // Handle shutdown gracefully

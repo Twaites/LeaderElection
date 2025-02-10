@@ -1,6 +1,6 @@
 import { db } from "./index";
 
-export type LeaderEventType = 'ELECTED' | 'LOST' | 'REFRESH';
+export type LeaderEventType = 'ELECTED' | 'LOST';
 
 export async function recordLeaderEvent(
     instanceId: string, 
