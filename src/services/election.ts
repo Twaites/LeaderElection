@@ -22,7 +22,7 @@ class LeaderElection {
                 if (!await updateLeaderHeartbeat()) {
                     this.isLeader = false;
                     await recordLeaderEvent(this.instanceId, 'LOST');
-                    logEvent('Lost leadership');
+                    logEvent(`${this.instanceId} Lost leadership`);
                 }
                 return;
             }
@@ -33,7 +33,7 @@ class LeaderElection {
             if (isStale && await tryBecomeLeader()) {
                 this.isLeader = true;
                 await recordLeaderEvent(this.instanceId, 'ELECTED');
-                logEvent('Became leader');
+                logEvent(`${this.instanceId} Became leader`);
             }
         } catch (error) {
             logEvent(`Error in election process: ${error}`);
